@@ -1,5 +1,5 @@
 # MP: Martingale Posteriors with Copulas
-This repository contains the code for the illustrations in "Martingale Posterior Distributions" by Edwin Fong, Chris Holmes and Stephen G. Walker. The preprint can be found [here](). 
+This repository contains the code for the illustrations in the preprint "Martingale Posterior Distributions" by Edwin Fong, Chris Holmes and Stephen G. Walker, which can be found [here](https://arxiv.org/abs/2103.15671). 
 
 We provide the run scripts for obtaining the numerical results and plots in the paper, and the run scripts use our `pr_copula` package. The `pr_copula` package is a general-purpose Python package built on [JAX](https://github.com/google/jax) for predictive bivariate copula updating with predictive resampling, returning density estimates and uncertainty. The package version here is a snapshot for the experiments in the paper - we will likely continue active development on the package in a separate repository. We may include a vignette on how to use the package at a later time. 
 
@@ -20,7 +20,7 @@ Please check the [JAX](https://github.com/google/jax) page for instructions on i
 The suggested version of R is ≥4.0 for the MCMC examples. Please install the `dirichletprocess` package [here](https://cran.r-project.org/web/packages/dirichletprocess/index.html).
 
 ## Running Experiments
-All experiment scripts can be found in `run_expt`. The scripts are prefixed based on the order in which the experiments appear in the paper, and running the Python scripts should involve entering the following in bash when in the `run_expt` folder:
+All experiment scripts can be found in `run_expt`. The scripts are prefixed based on the order in which the experiments appear in the paper, and running the Python scripts should involve entering the following in terminal when in the `run_expt` folder, for example:
 ```
 python3 1_univariate_copula.py
 ```
