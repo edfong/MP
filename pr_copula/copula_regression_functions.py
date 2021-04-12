@@ -12,11 +12,12 @@ from scipy.optimize import minimize,root
 
 from tqdm import tqdm_notebook
 
-from . import mv_copula_density as mvcd
+from . import copula_density_functions as mvcd
 from .utils.BFGS import minimize_BFGS
 
-## Joint method ###
-#condit marginal likelihood
+## Joint method regression ##
+
+#Compute conditional marginal likelihood (using multivariate copula density method)
 @jit
 def negpreq_jconditloglik_perm(hyperparam,z_perm):
     rho = 1/(1+jnp.exp(hyperparam)) #force 0 <rho<1
@@ -24,19 +25,18 @@ def negpreq_jconditloglik_perm(hyperparam,z_perm):
     n = jnp.shape(z_perm)[1]
     d = jnp.shape(z_perm)[2]
 
-    #For non autoregressive models, set rho_x -> jnp.inf?
+    #Compute v_{1:n} and prequential loglik
     vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik = mvcd.update_pn_loop_perm(rho,z_perm)
 
     #Average over permutations
     preq_conditloglik = preq_loglik[:,:,-1]-preq_loglik[:,:,-2]
     preq_conditloglik = jnp.mean(preq_conditloglik,axis = 0)
 
-    #Marg
+    #Sum prequential terms
     preq_conditloglik = jnp.sum(preq_conditloglik) # look at conditional pdf
     return -preq_conditloglik/n
 
-
-#Derivative
+#Compute derivatives wrt hyperparameters
 grad_jcll_perm = jit(grad(negpreq_jconditloglik_perm))
 fun_grad_jcll_perm = jit(value_and_grad(negpreq_jconditloglik_perm))
 
@@ -51,24 +51,25 @@ def fun_grad_jcll_perm_sp(hyperparam,z):
     return (np.array(value),np.array(grad))
 ### ###
 
-## Conditional method ###
-#vmap over rho/alpha as well
+## Conditional method regression ##
+
+### Utility functions ###
+
+#Vmap over rho/alpha as well as they depend on x
 update_copula = jit(vmap(mvcd.update_copula_single,(0,0,0,None,0,None))) 
+
+#Compute log k_xx for a single data point
 @jit
 def calc_logkxx_single(x,x_new,rho_x):
     logk_xx = -0.5*jnp.sum(jnp.log(1-rho_x**2)) -jnp.sum((0.5/(1-rho_x**2))*(((rho_x**2)*(x**2 + x_new**2) - 2*rho_x*x*x_new)))
     return logk_xx
 calc_logkxx = jit(vmap(calc_logkxx_single,(0,None,None)))
 calc_logkxx_test = jit(vmap(calc_logkxx,(None,0,None)))
+### ###
 
-@jit
-def calc_rhokxx_single(x,x_new,rho_0,l_scale):
-    rho_xx = rho_0*jnp.exp(-0.5*np.sum((x-x_new)**2/l_scale))
-    return rho_xx
-calc_rhoxx = jit(vmap(calc_rhokxx_single,(0,None,None)))
-calc_rhokxx_test = jit(vmap(calc_rhoxx,(None,0,None)))
+### Functions to calculate overhead v_{1:n} ###
 
-#overhead to calculate p_{1:n}(y_{1:n})
+# Compute v_i for a single datum 
 @jit
 def update_pn(carry,i):
     vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik,x,rho,rho_x = carry
@@ -97,11 +98,12 @@ def update_pn(carry,i):
     carry = vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik,x,rho,rho_x
     return carry,i
 
+#Scan over y_{1:n}
 @jit
 def update_pn_scan(carry,rng):
     return scan(update_pn,carry,rng)
 
-#loop update for pdf/cdf for xn
+#Compute v_{1:n}
 @jit
 def update_pn_loop(rho,rho_x,y,x):
     n = jnp.shape(y)[0]
@@ -119,10 +121,11 @@ def update_pn_loop(rho,rho_x,y,x):
 
     return vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik
 update_pn_loop_perm = jit(vmap(update_pn_loop,(None,None,0,0)))
+### ###
 
+### Functions for optimizing prequential log likelihood ###
 
-##OPTIMIZING MARGINAL LIKELIHOOD
-#joint marginal likelihood
+#Compute permutation-averaged conditional preq loglik
 @jit
 def negpreq_cconditloglik_perm(hyperparam,y_perm,x_perm):
     rho = 1/(1+jnp.exp(hyperparam[0])) #force 0 <rho<1
@@ -130,21 +133,20 @@ def negpreq_cconditloglik_perm(hyperparam,y_perm,x_perm):
 
     n = jnp.shape(y_perm)[1]
 
-    #For non autoregressive models, set rho_x -> jnp.inf?
+    #Compute v_{1:n} and prequential loglik
     vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik = update_pn_loop_perm(rho,rho_x,y_perm,x_perm)
 
     #Average over permutations
     preq_loglik = jnp.mean(preq_loglik,axis = 0)
 
-    #Marg
+    #Sum prequential terms
     preq_jointloglik = jnp.sum(preq_loglik[:,-1]) #only look at joint pdf
     return -preq_jointloglik/n
     
-#Derivative
+#Compute derivatives wrt hyperparameters
 grad_ccll_perm = jit(grad(negpreq_cconditloglik_perm))
 fun_grad_ccll_perm = jit(value_and_grad(negpreq_cconditloglik_perm))
 
-####
 #Functions for scipy (convert to numpy array)
 def fun_ccll_perm_sp(hyperparam,y_perm,x_perm):
     return np.array(negpreq_cconditloglik_perm(hyperparam,y_perm,x_perm))
@@ -154,9 +156,12 @@ def grad_ccll_perm_sp(hyperparam,y_perm,x_perm):
 def fun_grad_ccll_perm_sp(hyperparam,y_perm,x_perm):
     value,grad = fun_grad_ccll_perm(hyperparam,y_perm,x_perm)
     return (np.array(value),np.array(grad))
-####
+### ###
 
-### Predicting on Test ###
+
+### Functions for computing p(y|x) on test points ###
+
+#Update p(y|x) for a single test point and observed datum
 @jit
 def update_ptest_single(carry,i):
     vn,logcdf_conditionals_ytest,logpdf_joints_ytest,x,x_test,rho,rho_x = carry
@@ -183,10 +188,12 @@ def update_ptest_single(carry,i):
     carry = vn,logcdf_conditionals_ytest,logpdf_joints_ytest,x,x_test,rho,rho_x
     return carry,i
 
+#Scan over n observed data
 @jit
 def update_ptest_single_scan(carry,rng):
     return scan(update_ptest_single,carry,rng)
 
+#Compute p(y) for a single test point and y_{1:n}
 @jit
 def update_ptest_single_loop(vn,rho,rho_x,x,y_test,x_test):
     n = jnp.shape(vn)[0]
@@ -202,7 +209,7 @@ def update_ptest_single_loop(vn,rho,rho_x,x,y_test,x_test):
 
 update_ptest_single_loop_perm = jit(vmap(update_ptest_single_loop,(0,None,None,0,None,None))) #vmap over vn_perm
 
-#Average p(y) over permutations
+#Average p(y|x) over permutations for single test point
 @jit
 def update_ptest_single_loop_perm_av(vn_perm,rho,rho_x,x_perm,y_test,x_test):
     n_perm = jnp.shape(vn_perm)[0]
@@ -211,9 +218,10 @@ def update_ptest_single_loop_perm_av(vn_perm,rho,rho_x,x_perm,y_test,x_test):
     logpdf_joints = logsumexp(logpdf_joints,axis = 0) - jnp.log(n_perm)
     return logcdf_conditionals,logpdf_joints
 
-#No jit so can adapt to number of test points
+#Vmap over multiple test points
 update_ptest_loop_perm_av = jit(vmap(update_ptest_single_loop_perm_av,(None,None,None,None,0,0)))
+### ###
 
-
+## ##
 
 

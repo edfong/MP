@@ -10,10 +10,11 @@ from jax import vmap
 from jax.random import permutation,PRNGKey,split
 
 #import package functions
-from . import mv_copula_density as mvcd
-from . import sample_mv_copula_density as samp_mvcd
+from . import copula_density_functions as mvcd
+from . import sample_copula_density_functions as samp_mvcd
 
-
+### Fitting ###
+#Compute overhead v_{1:n}, return fit copula object for prediction
 def fit_copula_density(y,n_perm = 10, seed = 20,n_perm_optim = None, single_bandwidth = True):
     #Set seed for scipy
     np.random.seed(seed)
@@ -45,7 +46,6 @@ def fit_copula_density(y,n_perm = 10, seed = 20,n_perm_optim = None, single_band
     start = time.time()
     temp = mvcd.fun_jll_perm_sp(hyperparam_init,y_perm_opt)
     temp = mvcd.grad_jll_perm_sp(hyperparam_init,y_perm_opt)
-    #temp = mvcd.fun_grad_jll_perm_sp(hyperparam_init,y_perm_opt) #value and grad is slower for many parameters
     temp = mvcd.update_pn_loop_perm(rho_init,y_perm)[0].block_until_ready()
     end = time.time()
     print('Compilation time: {}s'.format(round(end-start, 3)))
@@ -75,7 +75,7 @@ def fit_copula_density(y,n_perm = 10, seed = 20,n_perm_optim = None, single_band
     copula_density_obj = namedtuple('copula_density_obj',['vn_perm','rho_opt','preq_loglik'])
     return copula_density_obj(vn_perm,rho_opt,-opt.fun)
 
-#Predict on test data using average permutations
+#Predict on test data using copula object
 def predict_copula_density(copula_density_obj,y_test):
     print('Predicting...')
     start = time.time()
@@ -85,7 +85,7 @@ def predict_copula_density(copula_density_obj,y_test):
     print('Prediction time: {}s'.format(round(end-start, 3)))
     return logcdf_conditionals,logpdf_joints
 
-#Add sampling function from Pn
+#Sample from predcitive density p_n
 def sample_copula_density(copula_density_obj,B_samples,seed = 100):
     d = np.shape(copula_density_obj.vn_perm)[2]
 
@@ -114,9 +114,9 @@ def sample_copula_density(copula_density_obj,B_samples,seed = 100):
     print('Sampling time: {}s'.format(round(end-start, 3)))
     print(f'Max abs error in cdf: {np.sqrt(np.max(err)):.2e}')
     return y_samp,err,n_iter
+### ###
 
-
-#Predictive resampling
+### Predictive Resampling ###
 #Forward sampling without diagnostics for speed
 def predictive_resample_density(copula_density_obj,y_test,B_postsamples, T_fwdsamples = 5000, seed = 100):
     #Fit permutation averaged cdf/pdf
@@ -158,41 +158,7 @@ def check_convergence_pr(copula_density_obj,y_test,B_postsamples,T_fwdsamples = 
     end = time.time()
     print('Predictive resampling time: {}s'.format(round(end-start, 3)))
     return logcdf_conditionals_pr,logpdf_joints_pr,pdiff,cdiff
-
-#Add quantile function
-def sample_pr_quantiles_density(copula_density_obj,quantile,B_samples,T_fwdsamples,seed = 100):
-    d = np.shape(copula_density_obj.vn_perm)[2]
-
-    #Get keys
-    key = PRNGKey(seed)
-    key,*subkey = split(key,B_samples+1)
-    subkey = jnp.array(subkey) #need this for vmap to work across subkeys (as it returns a list)
-
-    #Compiling
-    print('Compiling...')
-    start = time.time()
-    temp = samp_mvcd.sample_quantile_pN_av(copula_density_obj.vn_perm,copula_density_obj.rho_opt,quantile,key,T_fwdsamples)
-    end = time.time()
-    print('Compilation time: {}s'.format(round(end-start, 3)))
-
-    #Initialize
-    quantile_samp = np.zeros((B_samples,d))
-    err = np.zeros(B_samples)
-    n_iter = np.zeros(B_samples)
-
-
-    #Sampling
-    print('Sampling...')
-    start = time.time()
-    #OPTIONAL VMAP (very slow)
-    #quantile_samp,err,n_iter = samp_mvcd.sample_quantile_pN_av_B(copula_density_obj.vn_perm,copula_density_obj.rho_opt,quantile,subkey,T_fwdsamples)
-    for i in tqdm(range(B_samples)):
-        quantile_samp[i],err[i],n_iter[i] = samp_mvcd.sample_quantile_pN_av(copula_density_obj.vn_perm,copula_density_obj.rho_opt,quantile,subkey[i],T_fwdsamples)
-    end = time.time()
-    print('Sampling time: {}s'.format(round(end-start, 3)))
-    print(f'Max abs error in cdf: {np.sqrt(np.max(err)):.2e}')
-    return quantile_samp,err,n_iter
-
+### ###
 
 
 

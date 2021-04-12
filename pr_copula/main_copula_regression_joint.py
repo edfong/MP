@@ -10,11 +10,13 @@ from jax import vmap
 from jax.random import permutation,PRNGKey,split
 
 #import package functions
-from . import mv_copula_density as mvcd
-from . import mv_copula_regression as mvcr
-from . import sample_mv_copula_regression as samp_mvcr
-from . import sample_mv_copula_density as samp_mvcd
+from . import copula_density_functions as mvcd
+from . import copula_regression_functions as mvcr
+from . import sample_copula_regression_functions as samp_mvcr
+from . import sample_copula_density_functions as samp_mvcd
 
+### Fitting ###
+#Compute overhead v_{1:n}, return fit copula object for prediction
 def fit_copula_jregression(y,x,n_perm = 10, seed = 20,n_perm_optim = None, single_bandwidth = True):
     #Set seed for scipy
     np.random.seed(seed)
@@ -48,13 +50,10 @@ def fit_copula_jregression(y,x,n_perm = 10, seed = 20,n_perm_optim = None, singl
     #Compiling
     print('Compiling...')
     start = time.time()
+
     #Condit
-    #temp = mvcr.fun_grad_jcll_perm_sp(hyperparam_init,z_perm_opt) #value and grad is slower for many parameters
     temp = mvcr.fun_jcll_perm_sp(hyperparam_init,z_perm_opt)
     temp = mvcr.grad_jcll_perm_sp(hyperparam_init,z_perm_opt)
-
-    #Joint
-    #temp = mvcd.fun_grad_jll_perm_sp(hyperparam_init,z_perm_opt)
 
     temp = mvcd.update_pn_loop_perm(rho_init,z_perm)[0].block_until_ready()
     end = time.time()
@@ -98,8 +97,9 @@ def predict_copula_jregression(copula_jregression_obj,y_test,x_test):
     end = time.time()
     print('Prediction time: {}s'.format(round(end-start, 3)))
     return logcdf_conditionals,logpdf_joints
+### ###
 
-#Predictive resampling
+### Predictive resampling ###
 #Forward sampling without diagnostics for speed
 def predictive_resample_jregression(copula_jregression_obj,y_test,x_test,B_postsamples, T_fwdsamples = 5000, seed = 100):
     #Fit permutation averaged cdf/pdf
@@ -141,35 +141,4 @@ def check_convergence_pr_jregression(copula_jregression_obj,y_test,x_test,B_post
     end = time.time()
     print('Predictive resampling time: {}s'.format(round(end-start, 3)))
     return logcdf_conditionals_pr,logpdf_joints_pr,pdiff,cdiff
-
-#Add quantile function
-def sample_pr_quantiles_density(copula_jregression_obj,x_test,quantile,B_samples,T_fwdsamples,seed = 100):
-    d = np.shape(copula_jregression_obj.vn_perm)[2]
-
-    #Get keys
-    key = PRNGKey(seed)
-    key,*subkey = split(key,B_samples+1)
-    subkey = jnp.array(subkey) #need this for vmap to work across subkeys (as it returns a list)
-
-    #Compiling
-    print('Compiling...')
-    start = time.time()
-    temp = samp_mvcr.sample_quantile_pN_av(copula_jregression_obj.vn_perm,x_test,copula_jregression_obj.rho_opt,quantile,key,T_fwdsamples)
-    end = time.time()
-    print('Compilation time: {}s'.format(round(end-start, 3)))
-
-    #Initialize
-    quantile_samp = np.zeros((B_samples,1))
-    err = np.zeros(B_samples)
-    n_iter = np.zeros(B_samples)
-
-
-    #Sampling
-    print('Sampling...')
-    start = time.time()
-    for i in tqdm(range(B_samples)):
-        quantile_samp[i],err[i],n_iter[i] = samp_mvcr.sample_quantile_pN_av(copula_jregression_obj.vn_perm,x_test,copula_jregression_obj.rho_opt,quantile,subkey[i],T_fwdsamples)
-    end = time.time()
-    print('Sampling time: {}s'.format(round(end-start, 3)))
-    print(f'Max abs error in cdf: {np.sqrt(np.max(err)):.2e}')
-    return quantile_samp,err,n_iter
+### ###

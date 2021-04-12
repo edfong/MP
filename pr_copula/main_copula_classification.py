@@ -9,9 +9,11 @@ from jax import vmap
 from jax.random import permutation,PRNGKey,split
 
 #import package functions
-from . import mv_copula_classification as mvcc
-from . import sample_mv_copula_classification as samp_mvcc
+from . import copula_classification_functions as mvcc
+from . import sample_copula_classification_functions as samp_mvcc
 
+### Fitting ###
+#Compute overhead v_{1:n}, return fit copula object for prediction
 def fit_copula_classification(y,x,n_perm = 10, seed = 20,n_perm_optim = None,single_x_bandwidth = True):
     #Set seed for scipy
     np.random.seed(seed)
@@ -79,7 +81,6 @@ def fit_copula_classification(y,x,n_perm = 10, seed = 20,n_perm_optim = None,sin
     copula_classification_obj = namedtuple('copula_classification_obj',['log_vn_perm','logpmf_yn_perm','rho_opt','rho_x_opt','preq_loglik','y_perm','x_perm'])
     return copula_classification_obj(log_vn,logpmf_yn_perm,rho_opt,rho_opt_x,-opt.fun,y_perm,x_perm)
 
-
 #Returns p(y=1 |x)
 def predict_copula_classification(copula_classification_obj,x_test):
     #code loop for now, can speed up to use indices
@@ -96,7 +97,9 @@ def predict_copula_classification(copula_classification_obj,x_test):
     end = time.time()
     print('Prediction time: {}s'.format(round(end-start, 3)))
     return logpmf
+###
 
+### Predictive Resampling ###
 #Forward sampling: we can draw y,x directly as it is binary
 def predictive_resample_classification(copula_classification_obj,y,x,x_test,B_postsamples, T_fwdsamples = 5000, seed = 100):
     #Fit permutation averaged cdf/pdf
@@ -117,24 +120,5 @@ def predictive_resample_classification(copula_classification_obj,y,x,x_test,B_po
     end = time.time()
     print('Predictive resampling time: {}s'.format(round(end-start, 3)))
     return logpmf_ytest_samp,logpmf_yn_samp,y_samp,x_samp,pdiff
+### ###
 
-# #Check convergence by running 1 long forward sample chain (Not completed yet)
-# def check_convergence_pr_classification(copula_classification_obj,x,y_test,x_test,B_postsamples,T_fwdsamples = 10000, seed = 100):
-#     #Fit permutation averaged cdf/pdf
-#     logcdf_conditionals,logpdf_joints = predict_copula_classification(copula_classification_obj,y_test,x_test)
-
-#     # #Initialize random seeds
-#     key = PRNGKey(seed)
-#     key,*subkey = split(key,B_postsamples+1)
-#     subkey = jnp.array(subkey)
-
-#     #Forward sample
-#     n = jnp.shape(copula_classification_obj.vn_perm)[1] #get original data size
-#     print('Predictive resampling...')
-#     start = time.time()
-#     logcdf_conditionals_pr,logpdf_joints_pr,pdiff,cdiff = samp_mvcc.pr_loop_conv_classification_B(subkey,logcdf_conditionals,logpdf_joints,x,x_test,\
-#                                                                                                 copula_classification_obj.rho_opt,copula_classification_obj.rho_x_opt,n,T_fwdsamples)
-#     logcdf_conditionals_pr = logcdf_conditionals_pr.block_until_ready() #for accurate timing
-#     end = time.time()
-#     print('Predictive resampling time: {}s'.format(round(end-start, 3)))
-#     return logcdf_conditionals_pr,logpdf_joints_pr,pdiff,cdiff

@@ -9,9 +9,11 @@ from jax import vmap
 from jax.random import permutation,PRNGKey,split
 
 #import package functions
-from . import mv_copula_regression as mvcr
-from . import sample_mv_copula_regression as samp_mvcr
+from . import copula_regression_functions as mvcr
+from . import sample_copula_regression_functions as samp_mvcr
 
+### Fitting ###
+#Compute overhead v_{1:n}, return fit copula object for prediction
 def fit_copula_cregression(y,x,n_perm = 10, seed = 20,n_perm_optim = None,single_x_bandwidth = True):
     #Set seed for scipy
     np.random.seed(seed)
@@ -78,7 +80,7 @@ def fit_copula_cregression(y,x,n_perm = 10, seed = 20,n_perm_optim = None,single
     return copula_cregression_obj(vn_perm,rho_opt,rho_opt_x,-opt.fun,x_perm)
 
 
-#Predict on test data using average permutations
+#Predict on test data using copula object
 def predict_copula_cregression(copula_cregression_obj,y_test,x_test):
     #code loop for now, can speed up to use indices
     n_perm = np.shape(copula_cregression_obj.x_perm)[0]
@@ -94,7 +96,9 @@ def predict_copula_cregression(copula_cregression_obj,y_test,x_test):
     end = time.time()
     print('Prediction time: {}s'.format(round(end-start, 3)))
     return logcdf_conditionals,logpdf_joints
+### ###
 
+### Predictive Resampling ###
 #Forward sampling without diagnostics for speed
 def predictive_resample_cregression(copula_cregression_obj,x,y_test,x_test,B_postsamples, T_fwdsamples = 5000, seed = 100):
     #Fit permutation averaged cdf/pdf
@@ -136,3 +140,4 @@ def check_convergence_pr_cregression(copula_cregression_obj,x,y_test,x_test,B_po
     end = time.time()
     print('Predictive resampling time: {}s'.format(round(end-start, 3)))
     return logcdf_conditionals_pr,logpdf_joints_pr,pdiff,cdiff
+### ###

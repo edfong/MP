@@ -10,7 +10,9 @@ from functools import partial
 
 from .utils.bivariate_copula import norm_copula_logdistribution_logdensity
 
-#Initialize marginals
+### Utility functions ###
+
+#Initialize marginal p_0
 def init_marginals_single(y_test):
     d = jnp.shape(y_test)[0]
 
@@ -42,8 +44,7 @@ def init_marginals_single(y_test):
     return  logcdf_init_conditionals,logpdf_init_joints
 init_marginals = jit(vmap(init_marginals_single,(0)))
 
-#BACKUP, faster in loop 
-#single then vmap
+#Compute copula update for a single data point
 def update_copula_single(logcdf_conditionals,logpdf_joints,u,v,logalpha,rho): 
     d = jnp.shape(logpdf_joints)[0]
 
@@ -65,10 +66,11 @@ def update_copula_single(logcdf_conditionals,logpdf_joints,u,v,logalpha,rho):
     return logcdf_conditionals,logpdf_joints
 
 update_copula = jit(vmap(update_copula_single,(0,0,0,None,None,None))) 
+### ###
 
+### Functions to calculate overhead v_{1:n} ###
 
-
-#overhead to calculate p_{1:n}(y_{1:n})
+# Compute v_i for a single datum 
 @jit
 def update_pn(carry,i):
     vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik,rho = carry
@@ -89,11 +91,12 @@ def update_pn(carry,i):
     carry = vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik,rho
     return carry,i
 
+#Scan over y_{1:n}
 @jit
 def update_pn_scan(carry,rng):
     return scan(update_pn,carry,rng)
 
-#loop update for pdf/cdf for xn
+#Compute v_{1:n}
 @jit
 def update_pn_loop(rho,y):
     n = jnp.shape(y)[0]
@@ -113,10 +116,11 @@ def update_pn_loop(rho,y):
 
     return vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik
 update_pn_loop_perm = jit(vmap(update_pn_loop,(None,0)))
+### ###
 
+### Functions for optimizing prequential log likelihood ###
 
-##OPTIMIZING MARGINAL LIKELIHOOD
-#joint marginal likelihood
+#Compute permutation-averaged preq loglik
 @jit
 def negpreq_jointloglik_perm(hyperparam,y_perm):
     rho = 1/(1+jnp.exp(hyperparam)) #force 0 <rho<1
@@ -124,17 +128,17 @@ def negpreq_jointloglik_perm(hyperparam,y_perm):
     n = jnp.shape(y_perm)[1]
     d = jnp.shape(y_perm)[2]
 
-    #For non autoregressive models, set l_scale -> jnp.inf?
+    #Compute v_{1:n} and prequential loglik
     vn,logcdf_conditionals_yn,logpdf_joints_yn,preq_loglik = update_pn_loop_perm(rho,y_perm)
 
     #Average over permutations
     preq_loglik = jnp.mean(preq_loglik,axis = 0)
 
-    #Marg
+    #Sum prequential terms
     preq_jointloglik = jnp.sum(preq_loglik[:,-1]) #only look at joint pdf
     return -preq_jointloglik/n
      
-#Derivative
+#Compute derivatives wrt hyperparameters
 grad_jll_perm = jit(grad(negpreq_jointloglik_perm))
 fun_grad_jll_perm = jit(value_and_grad(negpreq_jointloglik_perm))
 
@@ -148,11 +152,13 @@ def grad_jll_perm_sp(hyperparam,z):
 def fun_grad_jll_perm_sp(hyperparam,z):
     value,grad = fun_grad_jll_perm(hyperparam,z)
     return (np.array(value),np.array(grad))
+### ###
 
-####
 
-#Computing p(y) for test points
-#loop update for pdf/cdf for multiple y_tests (for predictive resampling)
+
+### Functions for computing p(y) on test points ###
+
+#Update p(y) for a single test point and observed datum
 @jit
 def update_ptest_single(carry,i):
     vn,logcdf_conditionals_ytest,logpdf_joints_ytest,rho = carry
@@ -167,10 +173,12 @@ def update_ptest_single(carry,i):
     carry = vn,logcdf_conditionals_ytest,logpdf_joints_ytest,rho
     return carry,i
 
+#Scan over n observed data
 @jit
 def update_ptest_single_scan(carry,rng):
     return scan(update_ptest_single,carry,rng)
 
+#Compute p(y) for a single test point and y_{1:n}
 @jit
 def update_ptest_single_loop(vn,rho,y_test):
     n = jnp.shape(vn)[0]
@@ -186,7 +194,7 @@ def update_ptest_single_loop(vn,rho,y_test):
 
 update_ptest_single_loop_perm = jit(vmap(update_ptest_single_loop,(0,None,None))) #vmap over vn_perm
 
-#Average p(y) over permutations
+#Average p(y) over permutations for single test point
 @jit
 def update_ptest_single_loop_perm_av(vn_perm,rho,y_test):
     n_perm = jnp.shape(vn_perm)[0]
@@ -195,7 +203,8 @@ def update_ptest_single_loop_perm_av(vn_perm,rho,y_test):
     logpdf_joints = logsumexp(logpdf_joints,axis = 0) - jnp.log(n_perm)
     return logcdf_conditionals,logpdf_joints
 
-#No jit so can adapt to number of test points
+#Vmap over multiple test points
 update_ptest_loop_perm_av = jit(vmap(update_ptest_single_loop_perm_av,(None,None,0)))
+### ###
 
 
