@@ -3,9 +3,7 @@ import numpy as np
 from scipy.stats import bernoulli,norm
 
 #import copula functions
-from pr_copula import mv_copula_density as mvcd
-from pr_copula import sample_mv_copula_density as samp_mvcd
-from pr_copula.main_copula_density import fit_copula_density,predict_copula_density,predictive_resample_density,check_convergence_pr,sample_pr_quantiles_density
+from pr_copula.main_copula_density import fit_copula_density,predict_copula_density,predictive_resample_density,check_convergence_pr
 
 ### TOY GMM ###
 #Simulate toy data

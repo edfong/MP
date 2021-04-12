@@ -8,7 +8,6 @@ from sklearn.datasets import load_boston,load_diabetes
 from sklearn.model_selection import train_test_split
 
 #import copula functions
-from pr_copula import mv_copula_regression as mvcr
 from pr_copula.main_copula_regression_conditional import fit_copula_cregression,predict_copula_cregression
 
 #Evaluate Models

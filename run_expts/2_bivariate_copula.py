@@ -2,8 +2,6 @@ import jax.numpy as jnp
 import numpy as np
 
 #import copula functions
-from pr_copula import mv_copula_density as mvcd
-from pr_copula import sample_mv_copula_density as samp_mvcd
 from pr_copula.main_copula_density import fit_copula_density,predict_copula_density,predictive_resample_density, check_convergence_pr
 
 ### OZONE ###

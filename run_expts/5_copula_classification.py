@@ -6,8 +6,6 @@ import numpy as np
 #import copula functions
 from pr_copula.main_copula_classification import fit_copula_classification,predict_copula_classification,\
                                         predictive_resample_classification
-
-import pr_copula.sample_mv_copula_classification as samp_mvcc
 from jax.random import PRNGKey,split
 
 ## MOON ##

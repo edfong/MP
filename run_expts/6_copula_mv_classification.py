@@ -7,7 +7,6 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 #import copula functions
-from pr_copula import mv_copula_classification as mvcc
 from pr_copula.main_copula_classification import fit_copula_classification,predict_copula_classification
 
 #Fit models

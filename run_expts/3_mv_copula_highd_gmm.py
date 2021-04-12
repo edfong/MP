@@ -7,7 +7,6 @@ from sklearn.model_selection import train_test_split
 import time
 
 #import copula functions
-from pr_copula import mv_copula_density as mvcd
 from pr_copula.main_copula_density import fit_copula_density,predict_copula_density
 
 #Evaluate models
